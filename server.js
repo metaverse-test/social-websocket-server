@@ -1,9 +1,13 @@
+// ==========================================
+// SERVEUR WEBSOCKET — RÉSEAU SOCIAL
+// ==========================================
+
 const http = require("http");
 const WebSocket = require("ws");
 
 
 // ==========================================
-// PORT RENDER
+// PORT
 // ==========================================
 
 const PORT = process.env.PORT || 10000;
@@ -15,6 +19,7 @@ const PORT = process.env.PORT || 10000;
 
 const server = http.createServer((req, res) => {
 
+    // Route principale
     if (req.url === "/") {
 
         res.writeHead(200, {
@@ -22,15 +27,20 @@ const server = http.createServer((req, res) => {
         });
 
         res.end(
-            "WebSocket Server is running"
+            "Social WebSocket Server is running"
         );
 
         return;
     }
 
-    res.writeHead(404);
+
+    // Autres routes
+    res.writeHead(404, {
+        "Content-Type": "text/plain; charset=utf-8"
+    });
 
     res.end("Not Found");
+
 });
 
 
@@ -44,20 +54,87 @@ const wss = new WebSocket.Server({
 
 
 // ==========================================
+// NOMBRE DE CLIENTS CONNECTÉS
+// ==========================================
+
+function getConnectedClients() {
+
+    let count = 0;
+
+    wss.clients.forEach((client) => {
+
+        if (
+            client.readyState ===
+            WebSocket.OPEN
+        ) {
+
+            count++;
+
+        }
+
+    });
+
+    return count;
+}
+
+
+// ==========================================
+// BROADCAST
+// Envoie un événement à tous les clients
+// ==========================================
+
+function broadcast(data) {
+
+    const message =
+        JSON.stringify(data);
+
+    wss.clients.forEach((client) => {
+
+        if (
+            client.readyState ===
+            WebSocket.OPEN
+        ) {
+
+            client.send(message);
+
+        }
+
+    });
+
+}
+
+
+// ==========================================
 // NOUVELLE CONNEXION
 // ==========================================
 
 wss.on("connection", (socket) => {
 
-    console.log("🟢 Client WebSocket connecté");
+    console.log(
+        "🟢 Client connecté"
+    );
+
+    console.log(
+        "👥 Clients connectés :",
+        getConnectedClients()
+    );
 
 
-    // Message de confirmation
+    // ==========================================
+    // MESSAGE DE BIENVENUE
+    // ==========================================
 
     socket.send(
         JSON.stringify({
+
             type: "connected",
-            message: "Connexion WebSocket réussie"
+
+            message:
+                "Connexion WebSocket réussie",
+
+            clients:
+                getConnectedClients()
+
         })
     );
 
@@ -71,45 +148,313 @@ wss.on("connection", (socket) => {
         try {
 
             const data =
-                JSON.parse(message.toString());
+                JSON.parse(
+                    message.toString()
+                );
+
 
             console.log(
-                "📩 Message reçu :",
-                data
+                "📩 Événement reçu :",
+                data.type
             );
 
 
             // ======================================
-            // TEST BROADCAST
+            // TEST
             // ======================================
 
-            const response = JSON.stringify({
-                type: "server_response",
-                message: "Message reçu par le serveur",
-                data: data
-            });
+            if (data.type === "test") {
+
+                broadcast({
+
+                    type: "server_response",
+
+                    message:
+                        "Message reçu par le serveur",
+
+                    data: data
+
+                });
+
+            }
 
 
-            // Envoyer à tous les clients
+            // ======================================
+            // NOUVELLE PUBLICATION
+            // ======================================
 
-            wss.clients.forEach((client) => {
+            else if (
+                data.type ===
+                "new_publication"
+            ) {
 
-                if (
-                    client.readyState ===
-                    WebSocket.OPEN
-                ) {
+                broadcast({
 
-                    client.send(response);
+                    type:
+                        "new_publication",
 
-                }
+                    post:
+                        data.post
 
-            });
+                });
+
+            }
+
+
+            // ======================================
+            // PUBLICATION MODIFIÉE
+            // ======================================
+
+            else if (
+                data.type ===
+                "publication_updated"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "publication_updated",
+
+                    post:
+                        data.post
+
+                });
+
+            }
+
+
+            // ======================================
+            // PUBLICATION SUPPRIMÉE
+            // ======================================
+
+            else if (
+                data.type ===
+                "publication_deleted"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "publication_deleted",
+
+                    publication_id:
+                        data.publication_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOUVEAU LIKE
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_like"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_like",
+
+                    publication_id:
+                        data.publication_id,
+
+                    user_id:
+                        data.user_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // LIKE SUPPRIMÉ
+            // ======================================
+
+            else if (
+                data.type ===
+                "like_removed"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "like_removed",
+
+                    publication_id:
+                        data.publication_id,
+
+                    user_id:
+                        data.user_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOUVEAU COMMENTAIRE
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_comment"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_comment",
+
+                    comment:
+                        data.comment
+
+                });
+
+            }
+
+
+            // ======================================
+            // COMMENTAIRE SUPPRIMÉ
+            // ======================================
+
+            else if (
+                data.type ===
+                "comment_deleted"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "comment_deleted",
+
+                    comment_id:
+                        data.comment_id,
+
+                    publication_id:
+                        data.publication_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOUVELLE SAUVEGARDE
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_save"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_save",
+
+                    publication_id:
+                        data.publication_id,
+
+                    user_id:
+                        data.user_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOUVEAU PARTAGE
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_share"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_share",
+
+                    publication_id:
+                        data.publication_id,
+
+                    user_id:
+                        data.user_id
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOTIFICATION
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_notification"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_notification",
+
+                    notification:
+                        data.notification
+
+                });
+
+            }
+
+
+            // ======================================
+            // NOUVEAU MESSAGE
+            // ======================================
+
+            else if (
+                data.type ===
+                "new_message"
+            ) {
+
+                broadcast({
+
+                    type:
+                        "new_message",
+
+                    message:
+                        data.message
+
+                });
+
+            }
+
+
+            // ======================================
+            // ÉVÉNEMENT INCONNU
+            // ======================================
+
+            else {
+
+                console.log(
+                    "⚠️ Type inconnu :",
+                    data.type
+                );
+
+            }
 
 
         } catch (error) {
 
             console.error(
-                "❌ JSON invalide"
+                "❌ Erreur JSON :",
+                error.message
             );
 
         }
@@ -124,7 +469,12 @@ wss.on("connection", (socket) => {
     socket.on("close", () => {
 
         console.log(
-            "🔴 Client WebSocket déconnecté"
+            "🔴 Client déconnecté"
+        );
+
+        console.log(
+            "👥 Clients connectés :",
+            getConnectedClients()
         );
 
     });
@@ -138,7 +488,7 @@ wss.on("connection", (socket) => {
 
         console.error(
             "❌ WebSocket error :",
-            error
+            error.message
         );
 
     });
@@ -147,7 +497,7 @@ wss.on("connection", (socket) => {
 
 
 // ==========================================
-// DÉMARRAGE
+// DÉMARRAGE DU SERVEUR
 // ==========================================
 
 server.listen(PORT, () => {
